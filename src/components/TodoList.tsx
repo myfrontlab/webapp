@@ -10,7 +10,7 @@ const TodoList = () => {
   return (
     <>
       <Top />
-      <div className="row">
+      <div className="row py-5">
         <DataTable
           columns={[
             {
