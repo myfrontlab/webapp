@@ -1,0 +1,16 @@
+---
+- name: Deploy docker services
+  hosts: 127.0.0.1
+  connection: local
+  tasks:
+    - name: Container present
+      community.docker.docker_container:
+        name: webapp
+        state: started
+        restart: true
+        image: "{{ CI_REGISTRY }}/webapp:{{ VERSION }}"
+        restart_policy: always
+        published_ports:
+          - 127.0.0.1:9092:80
+        networks:
+          - name: api

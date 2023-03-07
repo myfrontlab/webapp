@@ -1,0 +1,65 @@
+---
+stages:
+  - build
+  - deploy-app
+
+variables:
+  K8S_TEMP_CERT_PATH: /tmp/ca.crt
+  NAMESPACE: dev
+  INGRESS_CLASS_NAME: nginx
+
+.env_stage_prod:
+  variables:
+    CHART_NAME: webapp
+    INGRESS_HOST: "app.vnmntn.com"
+    MINIO_INGRESS_HOST_API: $MINIO_INGRESS_HOST_API_PROD
+
+build:
+  stage: build
+  image: docker:dind
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - IMAGE=$CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:$CI_PIPELINE_IID
+    - echo "Building $IMAGE"
+    - docker build . -t $IMAGE
+    - docker push $IMAGE
+  only:
+    - master
+  tags:
+    - docker
+
+.release.app:
+  image: dtzar/helm-kubectl
+  before_script:
+    - cp $K8S_CERT_PROD $K8S_TEMP_CERT_PATH
+  script:
+    - helm repo add --username $CI_REGISTRY_USER --password $CI_REGISTRY_PASSWORD template 
+      $CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/helm/stable
+    - helm repo update
+    - helm search repo template
+    - helm upgrade $CHART_NAME template/template
+      --install
+      --atomic
+      --namespace=$NAMESPACE
+      --kube-apiserver $K8S_SERVER_PROD
+      --kube-token $K8S_TOKEN_PROD
+      --kube-ca-file $K8S_TEMP_CERT_PATH
+      --set image.repository=$CI_REGISTRY/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
+      --set image.tag=$CI_PIPELINE_IID
+      --set imagePullSecrets[0].name="docker-login"
+      --set ingress.enabled=true
+      --set ingress.className=nginx
+      --set ingress.hosts[0].host=$INGRESS_HOST
+      --set ingress.hosts[0].paths[0].path=/
+      --set ingress.hosts[0].paths[0].pathType=ImplementationSpecific
+      -f ./values.yaml
+
+release.app:
+  extends:
+    - .env_stage_prod
+    - .release.app
+  stage: deploy-app
+  only:
+    - master
+  tags:
+    - docker

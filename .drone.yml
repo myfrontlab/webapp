@@ -1,0 +1,31 @@
+---
+kind: pipeline
+type: exec
+name: default
+
+platform:
+  os: linux
+  arch: amd64
+
+steps:
+- name: build
+  commands:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build . -t $CI_REGISTRY/webapp:$DRONE_BUILD_NUMBER
+    - docker push $CI_REGISTRY/webapp:$DRONE_BUILD_NUMBER
+  environment:
+    CI_REGISTRY:
+      from_secret: CI_REGISTRY
+    CI_REGISTRY_USER:
+      from_secret: CI_REGISTRY_USER
+    CI_REGISTRY_PASSWORD:
+      from_secret: CI_REGISTRY_PASSWORD
+
+- name: deploy
+  commands:
+    - ansible-playbook ./.playbook.yml 
+        -e CI_REGISTRY=$CI_REGISTRY 
+        -e VERSION=$DRONE_BUILD_NUMBER
+  environment:
+    CI_REGISTRY:
+      from_secret: CI_REGISTRY
